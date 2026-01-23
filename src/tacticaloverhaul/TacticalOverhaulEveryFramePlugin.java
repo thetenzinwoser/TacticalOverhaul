@@ -212,17 +212,19 @@ public class TacticalOverhaulEveryFramePlugin extends BaseEveryFrameCombatPlugin
     }
 
     private void handleScrollWheel(List<InputEventAPI> events) {
-        // Process scroll wheel events from the event list and consume them
+        // Use direct LWJGL polling for scroll wheel (more reliable)
+        int dWheel = Mouse.getDWheel();
+        if (dWheel != 0) {
+            // Scroll up = zoom in (increase zoom value), scroll down = zoom out
+            float zoomChange = dWheel > 0 ? SCROLL_ZOOM_FACTOR : -SCROLL_ZOOM_FACTOR;
+            targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom + zoomChange));
+        }
+
+        // Also consume any scroll events in the event list to prevent game default handling
         for (InputEventAPI event : events) {
             if (event.isConsumed()) continue;
             if (event.isMouseScrollEvent()) {
-                int dWheel = (int) event.getEventValue();
-                if (dWheel != 0) {
-                    // Scroll up = zoom in (increase zoom value), scroll down = zoom out
-                    float zoomChange = dWheel > 0 ? SCROLL_ZOOM_FACTOR : -SCROLL_ZOOM_FACTOR;
-                    targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom + zoomChange));
-                    event.consume();
-                }
+                event.consume();
             }
         }
     }

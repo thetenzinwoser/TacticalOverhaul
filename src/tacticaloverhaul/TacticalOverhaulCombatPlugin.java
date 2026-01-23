@@ -220,6 +220,9 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
             }
         }
 
+        // Draw ALL friendly ships' current orders (like Tab view)
+        drawAllShipOrders(engine, alpha);
+
         // Draw objectives
         for (BattleObjectiveAPI objective : engine.getObjectives()) {
             float x = objective.getLocation().x;
@@ -280,6 +283,160 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
                 float targetY = commandAttackTarget.getLocation().y;
                 drawAttackMarker(targetX, targetY, alpha);
             }
+        }
+    }
+
+    private void drawAllShipOrders(CombatEngineAPI engine, float alpha) {
+        CombatFleetManagerAPI fleetManager = engine.getFleetManager(0); // Player fleet
+        if (fleetManager == null) return;
+
+        CombatTaskManagerAPI taskManager = fleetManager.getTaskManager(false);
+        if (taskManager == null) return;
+
+        // Iterate through all friendly non-fighter ships
+        for (ShipAPI ship : engine.getShips()) {
+            if (ship.getOwner() != 0) continue; // Only friendly ships
+            if (ship.isHulk() || ship.isFighter() || ship.isShuttlePod()) continue;
+
+            DeployedFleetMemberAPI deployed = fleetManager.getDeployedFleetMember(ship);
+            if (deployed == null) continue;
+
+            // Get current assignment for this ship
+            CombatFleetManagerAPI.AssignmentInfo assignment = taskManager.getAssignmentFor(ship);
+            if (assignment == null) continue;
+
+            AssignmentTargetAPI target = assignment.getTarget();
+            if (target == null) continue;
+
+            float shipX = ship.getLocation().x;
+            float shipY = ship.getLocation().y;
+
+            CombatAssignmentType type = assignment.getType();
+
+            // Determine color based on assignment type
+            Color lineColor;
+            if (type == CombatAssignmentType.INTERCEPT ||
+                type == CombatAssignmentType.STRIKE ||
+                type == CombatAssignmentType.HARASS) {
+                // Attack orders - red
+                lineColor = new Color(ATTACK_LINE_COLOR.getRed(), ATTACK_LINE_COLOR.getGreen(),
+                                      ATTACK_LINE_COLOR.getBlue(), (int)(120 * alpha));
+            } else if (type == CombatAssignmentType.RETREAT) {
+                // Retreat - yellow
+                lineColor = new Color(255, 200, 50, (int)(120 * alpha));
+            } else {
+                // Move/defend orders - green
+                lineColor = new Color(WAYPOINT_COLOR.getRed(), WAYPOINT_COLOR.getGreen(),
+                                      WAYPOINT_COLOR.getBlue(), (int)(120 * alpha));
+            }
+
+            Vector2f targetLoc = target.getLocation();
+            if (targetLoc != null) {
+                // Draw order line from ship to target
+                drawOrderLine(shipX, shipY, targetLoc.x, targetLoc.y, lineColor, type);
+
+                // Draw target marker (smaller than command markers)
+                drawOrderMarker(targetLoc.x, targetLoc.y, type, alpha * 0.7f);
+            }
+        }
+    }
+
+    private void drawOrderLine(float x1, float y1, float x2, float y2, Color color, CombatAssignmentType type) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float length = (float) Math.sqrt(dx * dx + dy * dy);
+        if (length < 50f) return; // Don't draw very short lines
+
+        // Draw a thinner, more subtle dashed line for existing orders
+        float dashLength = 20f;
+        float gapLength = 15f;
+        float segmentLength = dashLength + gapLength;
+        int segments = (int) (length / segmentLength);
+
+        float nx = dx / length;
+        float ny = dy / length;
+
+        GL11.glColor4f(color.getRed() / 255f, color.getGreen() / 255f,
+                       color.getBlue() / 255f, color.getAlpha() / 255f);
+        GL11.glLineWidth(1.5f);
+        GL11.glBegin(GL11.GL_LINES);
+
+        for (int i = 0; i <= segments; i++) {
+            float startDist = i * segmentLength;
+            float endDist = Math.min(startDist + dashLength, length);
+
+            float sx = x1 + nx * startDist;
+            float sy = y1 + ny * startDist;
+            float ex = x1 + nx * endDist;
+            float ey = y1 + ny * endDist;
+
+            GL11.glVertex2f(sx, sy);
+            GL11.glVertex2f(ex, ey);
+        }
+
+        GL11.glEnd();
+        GL11.glLineWidth(1f);
+
+        // Draw small arrowhead at the end
+        if (length > 100f) {
+            float arrowDist = length - 30f;
+            float arrowX = x1 + nx * arrowDist;
+            float arrowY = y1 + ny * arrowDist;
+            float angle = (float) Math.atan2(dy, dx);
+            float arrowSize = 10f;
+            float arrowAngle = (float) Math.toRadians(150);
+
+            float ax1 = arrowX + (float) Math.cos(angle + arrowAngle) * arrowSize;
+            float ay1 = arrowY + (float) Math.sin(angle + arrowAngle) * arrowSize;
+            float ax2 = arrowX + (float) Math.cos(angle - arrowAngle) * arrowSize;
+            float ay2 = arrowY + (float) Math.sin(angle - arrowAngle) * arrowSize;
+
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glVertex2f(x2, y2);
+            GL11.glVertex2f(ax1, ay1);
+            GL11.glVertex2f(x2, y2);
+            GL11.glVertex2f(ax2, ay2);
+            GL11.glEnd();
+        }
+    }
+
+    private void drawOrderMarker(float x, float y, CombatAssignmentType type, float alpha) {
+        Color markerColor;
+        float markerSize = 15f;
+
+        if (type == CombatAssignmentType.INTERCEPT ||
+            type == CombatAssignmentType.STRIKE ||
+            type == CombatAssignmentType.HARASS) {
+            // Attack - small X
+            markerColor = new Color(ATTACK_LINE_COLOR.getRed(), ATTACK_LINE_COLOR.getGreen(),
+                                    ATTACK_LINE_COLOR.getBlue(), (int)(180 * alpha));
+            GL11.glLineWidth(2f);
+            GL11.glColor4f(markerColor.getRed() / 255f, markerColor.getGreen() / 255f,
+                           markerColor.getBlue() / 255f, markerColor.getAlpha() / 255f);
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glVertex2f(x - markerSize, y - markerSize);
+            GL11.glVertex2f(x + markerSize, y + markerSize);
+            GL11.glVertex2f(x - markerSize, y + markerSize);
+            GL11.glVertex2f(x + markerSize, y - markerSize);
+            GL11.glEnd();
+            GL11.glLineWidth(1f);
+        } else if (type == CombatAssignmentType.RETREAT) {
+            // Retreat - arrow pointing away
+            markerColor = new Color(255, 200, 50, (int)(180 * alpha));
+            drawCircle(x, y, markerSize, markerColor);
+        } else {
+            // Defend/move - small circle with dot
+            markerColor = new Color(WAYPOINT_COLOR.getRed(), WAYPOINT_COLOR.getGreen(),
+                                    WAYPOINT_COLOR.getBlue(), (int)(180 * alpha));
+            drawCircle(x, y, markerSize, markerColor);
+            // Draw center dot
+            GL11.glColor4f(markerColor.getRed() / 255f, markerColor.getGreen() / 255f,
+                           markerColor.getBlue() / 255f, markerColor.getAlpha() / 255f);
+            GL11.glPointSize(4f);
+            GL11.glBegin(GL11.GL_POINTS);
+            GL11.glVertex2f(x, y);
+            GL11.glEnd();
+            GL11.glPointSize(1f);
         }
     }
 
