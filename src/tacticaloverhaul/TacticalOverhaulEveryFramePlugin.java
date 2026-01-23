@@ -212,20 +212,28 @@ public class TacticalOverhaulEveryFramePlugin extends BaseEveryFrameCombatPlugin
     }
 
     private void handleScrollWheel(List<InputEventAPI> events) {
-        // Use direct LWJGL polling for scroll wheel (more reliable)
-        int dWheel = Mouse.getDWheel();
-        if (dWheel != 0) {
-            // Scroll up = zoom in (increase zoom value), scroll down = zoom out
-            float zoomChange = dWheel > 0 ? SCROLL_ZOOM_FACTOR : -SCROLL_ZOOM_FACTOR;
-            targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom + zoomChange));
-        }
-
-        // Also consume any scroll events in the event list to prevent game default handling
+        // Process scroll wheel events from InputEventAPI
         for (InputEventAPI event : events) {
             if (event.isConsumed()) continue;
+
             if (event.isMouseScrollEvent()) {
+                int dWheel = event.getEventValue();
+                if (dWheel != 0) {
+                    // Scroll up (positive) = zoom in, scroll down (negative) = zoom out
+                    float zoomChange = (dWheel > 0 ? 1 : -1) * SCROLL_ZOOM_FACTOR;
+                    targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom + zoomChange));
+                }
+                // Consume to prevent game's default zoom handling
                 event.consume();
             }
+        }
+
+        // Fallback: also check +/- keys for zoom (in case scroll doesn't work)
+        if (Keyboard.isKeyDown(Keyboard.KEY_EQUALS) || Keyboard.isKeyDown(Keyboard.KEY_ADD)) {
+            targetZoom = Math.min(MAX_ZOOM, targetZoom + SCROLL_ZOOM_FACTOR * 0.05f);
+        }
+        if (Keyboard.isKeyDown(Keyboard.KEY_MINUS) || Keyboard.isKeyDown(Keyboard.KEY_SUBTRACT)) {
+            targetZoom = Math.max(MIN_ZOOM, targetZoom - SCROLL_ZOOM_FACTOR * 0.05f);
         }
     }
 
