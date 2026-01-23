@@ -45,6 +45,7 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
     private static final Color FLUX_WARNING = new Color(255, 200, 50);
     private static final Color FLUX_NORMAL = new Color(100, 255, 100);
     private static final Color MESSAGE_COLOR = new Color(255, 255, 200);
+    private static final Color BRACKET_COLOR = new Color(0, 255, 200); // Cyan tactical brackets
 
     public void setTacticalModeActive(boolean active) {
         this.tacticalModeActive = active;
@@ -104,9 +105,9 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
-        // Draw dimming overlay across the entire visible area
+        // Draw corner brackets to indicate tactical mode
         if (overlayAlpha > 0.001f) {
-            drawDimOverlay(viewport);
+            drawCornerBrackets(viewport);
         }
 
         // Only draw tactical elements when overlay is visible enough
@@ -119,18 +120,25 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
         GL11.glPopMatrix();
     }
 
-    private void drawDimOverlay(ViewportAPI viewport) {
+    private void drawCornerBrackets(ViewportAPI viewport) {
         float llx = viewport.getLLX();
         float lly = viewport.getLLY();
         float w = viewport.getVisibleWidth();
         float h = viewport.getVisibleHeight();
 
-        GL11.glColor4f(0f, 0f, 0f, overlayAlpha);
-        GL11.glBegin(GL11.GL_QUADS);
-        GL11.glVertex2f(llx, lly);
-        GL11.glVertex2f(llx + w, lly);
-        GL11.glVertex2f(llx + w, lly + h);
-        GL11.glVertex2f(llx, lly + h);
+        // Subtle scanline effect - horizontal lines across screen
+        float lineSpacing = 4f; // pixels between lines
+        float alpha = overlayAlpha * 0.08f; // Very subtle - 8% opacity max
+
+        GL11.glColor4f(BRACKET_COLOR.getRed() / 255f, BRACKET_COLOR.getGreen() / 255f,
+                       BRACKET_COLOR.getBlue() / 255f, alpha);
+        GL11.glLineWidth(1f);
+
+        GL11.glBegin(GL11.GL_LINES);
+        for (float y = lly; y < lly + h; y += lineSpacing) {
+            GL11.glVertex2f(llx, y);
+            GL11.glVertex2f(llx + w, y);
+        }
         GL11.glEnd();
     }
 
@@ -191,9 +199,9 @@ public class TacticalOverhaulCombatPlugin extends BaseCombatLayeredRenderingPlug
                 }
             }
 
-            // Draw flux indicator (arc around ship)
+            // Draw flux indicator (arc around ship) - only for enemies
             float fluxLevel = ship.getFluxLevel();
-            if (fluxLevel > 0.01f) {
+            if (ship.getOwner() == 1 && fluxLevel > 0.01f) {
                 Color baseFluxColor;
                 int fluxAlpha;
                 if (fluxLevel > 0.8f) {
